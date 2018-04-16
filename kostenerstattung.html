@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="de">
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+	<title>Kostenerstattungsantrag Wikimedia Deutschland e.V.</title>
+	<link rel="stylesheet" href="verpflegungsmehraufwand.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+	<script src="polyfiller.js"></script>
+	<script src="iban.js/iban.js"></script>
+	<script>
+		var eintraege = 0;
+
+		function neuerIndex()
+		{
+			var aufstellung = document.getElementById('Aufstellung'),
+				eintraege = document.querySelectorAll('#Aufstellung tbody tr');
+			for(var n = 0; n < eintraege.length; n++)
+			{
+				eintraege[n].querySelector('legend').textContent = n+1+'. Position';
+			}
+		}
+
+		function checkIban()
+		{
+			var iban = document.getElementById('iban');
+			
+			if(IBAN.isValid(iban.value))
+			{
+				iban.setAttribute('class','valid');
+			}
+			else
+			{
+				iban.setAttribute('class','invalid');
+			}
+		}
+
+		function neueZeileGebraucht()
+		{
+			var eintraege = document.querySelectorAll('#Aufstellung tbody tr');
+			if(2 === eintraege.length) 
+			{
+				addLine();
+				return true;
+			}
+
+			var datum = document.getElementById('Datum['+(eintraege.length-1)+']'),
+				betrag = document.getElementById('Betrag['+(eintraege.length-1)+']');
+
+			if("" !== datum.value || "0.00" !== betrag.value) addLine();
+		}
+
+		function aktualisiereSumme()
+		{
+			var aufstellung = document.getElementById('Aufstellung'),
+				eintraege = document.querySelectorAll('#Aufstellung tbody tr'),
+				summe = 0-parseFloat(document.getElementById('vorschuss').value);
+			for(var e = 1; e < eintraege.length-1; e++)
+			{
+//				console.log('aktualisiereSumme/Summe: '+summe);
+//				console.log('aktualisiereSumme/eintraege[e].id: '+eintraege[e].id);
+				var id = parseInt(eintraege[e].id.match(/(\d+)/)[0]);
+				summe += parseFloat(document.getElementById('Betrag['+id+']').querySelector('input').value);
+			}
+			document.getElementById('Summe').textContent = summe.toFixed(2);
+		}
+
+		function checkForUpdates()
+		{
+//			neueZeileGebraucht();
+			aktualisiereSumme();
+		}
+
+		function erstellePosition(p)
+		{
+			var vorlage = document.getElementById('neuerEintrag'),
+				neuerEintrag, inputs, labels, spans, textareas, tds;
+
+			neuerEintrag = document.importNode(vorlage.content, true);
+			neuerEintrag.querySelector('tr').id='Reihe['+p+']';
+			tds = neuerEintrag.querySelectorAll('td');
+			tds[0].id = 'Position['+p+']';
+			tds[1].id = 'Beschreibung['+p+']';
+			tds[2].id = 'Belegdatum['+p+']';
+			tds[3].id = 'Betrag['+p+']';
+			tds[4].id = 'Kostenstelle['+p+']';
+			tds[5].id = 'Genehmigung['+p+']';
+			tds[6].id = 'Anweisung['+p+']';
+			tds[7].id = 'Kontierung['+p+']';
+			tds[8].id = 'Delete['+p+']';
+			tds[0].textContent = p;
+			tds[8].querySelector('button').onclick = delLine;
+			tds[8].querySelector('button').ontouch = delLine;
+			tds[3].querySelector('input').onchange = checkForUpdates;
+			spans = neuerEintrag.querySelectorAll('span');
+			return neuerEintrag;
+		}
+
+		function fadeIn(element)
+		{
+			console.log('Fading in');
+			var op = 0.1;  // initial opacity
+			element.style.opacity = 0;
+			element.style.filter = 'alpha(opacity=0)';
+			element.style.display = 'table-row';
+			var timer = setInterval(function ()
+			{
+				element.style.opacity = op;
+				element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+				op += op * 0.1;
+				if (op >= 1)
+				{
+					clearInterval(timer);
+					element.style.opacity = 1;
+					element.style.filter = 'alpha(opacity=100)';
+				}
+			}, 10);
+		}
+		function fadeOut(element)
+		{
+			console.log('Fading out');
+			var op = 1;  // initial opacity
+			var timer = setInterval(function ()
+			{
+				if (op <= 0.1)
+				{
+					clearInterval(timer);
+					element.style.display = 'none';
+				}
+				element.style.opacity = op;
+				element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+				op -= 0.05;
+			}, 25);
+		}
+
+		function removeAfterTimeout(element)
+		{
+			console.log('Removing '+element.id);
+			var eintraege = document.querySelectorAll('#Aufstellung tbody tr'),
+				aufstellung = document.getElementById('Aufstellung'),
+				currentId = parseInt(element.id.match(/(\d+)/)[0]);
+			element.parentNode.removeChild(document.getElementById('Reihe['+currentId+']'));
+//			console.log('removeAfterTimeout/currentId: '+currentId);
+//			console.log('removeAfterTimeout/eintraege.length: '+eintraege.length);
+			if((currentId+1) < (eintraege.length))
+			{
+				// if there are more entries after the one supposed to be deleted, change their index values to match their new position
+				for(var i = currentId+1; i < eintraege.length-1; i++)
+				{
+//					console.log('removeAfterTimeout/i: '+i);
+					var regex = new RegExp(/\d+/),
+						newIdx = i-1,
+						pos = document.getElementById('Reihe['+i+']');
+//					console.log('removeAfterTimeout/newIdx: '+newIdx);
+//					console.log('removeAfterTimeout/pos.id before: '+pos.id);
+					pos.id=pos.id.replace(regex,newIdx);
+//					console.log('removeAfterTimeout/pos.id after: '+pos.id);
+					for(var n = 0; n < pos.childNodes.length; n++)
+					{
+						if(1 == pos.childNodes[n].nodeType)
+						{
+							pos.childNodes[n].id=pos.childNodes[n].id.replace(/\d/,newIdx);
+						}
+					}
+					document.getElementById('Position['+newIdx+']').textContent = newIdx;
+				}
+			}
+			checkForUpdates();
+		}
+
+		function delLine()
+		{
+			var eintraege = document.querySelectorAll('#Aufstellung tbody tr'),
+				aufstellung = document.getElementById('Aufstellung');
+			var current = this.parentNode.parentNode;
+			console.log(current);
+			fadeOut(current);
+			setTimeout(removeAfterTimeout, 1100, current);
+		}
+
+		function addLine()
+		{
+			var eintraege = document.querySelectorAll('#Aufstellung tbody tr'),
+				aufstellung = document.getElementById('Aufstellung').querySelector('tbody');
+
+			var neu = erstellePosition(eintraege.length-1);
+			aufstellung.insertBefore(neu,document.getElementById('more'));
+//			var eingefuegt = aufstellung.querySelector('fieldset:last-of-type');
+			var eingefuegt = aufstellung.querySelector('tr:nth-last-of-type(2)');
+//			neuerIndex();
+			console.log('Adding '+eingefuegt.id);
+			fadeIn(eingefuegt);
+		}
+
+		function splitDateString(date) { return date.match(/(\d{4})-(\d{2})-(\d{2})/); }
+		function splitTimeString(time) { return time.match(/(\d{2}):(\d{2})/); }
+
+		function restoreFromCookie()
+		{
+			var c = document.cookie.match(new RegExp('Kostenerstattung' + '=([^;]+)'));
+			console.log(c);
+			if(c) {
+				c && (c = JSON.parse(c[1]));
+				document.getElementById('projekt').value = c.projekt;
+				document.getElementById('ansprech').value = c.ansprech;
+				document.getElementById('real').value = c.real;
+				document.getElementById('email').value = c.email;
+				document.getElementById('phone').value = c.phone;
+				document.getElementById('iban').value = c.iban;
+				document.getElementById('bic').value = c.bic;
+				document.getElementById('bank').value = c.bank;
+			}
+		}
+
+		function storeToCookie()
+		{
+			var c =
+			{
+				'projekt': document.getElementById('projekt').value,
+				'ansprech': document.getElementById('ansprech').value,
+				'real': document.getElementById('real').value,
+				'email': document.getElementById('email').value,
+				'phone': document.getElementById('phone').value,
+				'iban': document.getElementById('iban').value,
+				'bic': document.getElementById('bic').value,
+				'bank': document.getElementById('bank').value,
+			};
+			document.cookie = 'Kostenerstattung='+JSON.stringify(c)+'; domain='+window.location.host.toString()+'; path=/extern; expires='+(new Date().getTime()+1000*60*60*24*365);
+		}
+
+		function init() {
+			document.getElementById("print_top").addEventListener('click', function() { window.print(); }, true);
+			document.getElementById("print_top").addEventListener('touch', function() { window.print(); }, true);
+			document.getElementById("print_bottom").addEventListener('click', function() { window.print(); }, true);
+			document.getElementById("print_bottom").addEventListener('touch', function() { window.print(); }, true);
+			document.getElementById('vorschuss').addEventListener('change', aktualisiereSumme);
+			document.getElementById('iban').addEventListener('change', checkIban);
+			document.getElementById('save').addEventListener('click', storeToCookie);
+			document.getElementById('save').addEventListener('touch', storeToCookie);
+			document.getElementById('addbutton').addEventListener('click', addLine);
+			document.getElementById('addbutton').addEventListener('touch', addLine);
+//			if(document.cookie) restoreFromCookie();
+		}
+
+		function init2()
+		{
+			webshims.setOptions('forms-ext', {types: 'date'});
+			webshims.polyfill('forms forms-ext');
+			addLine();
+			aktualisiereSumme();
+		}
+
+		window.addEventListener('DOMContentLoaded',init);
+		window.addEventListener('load',init2);
+
+	</script>
+</head>
+
+<body>
+	<header>
+		<img style="float: right;" src="logo_web.png" alt="logo">
+		<h1>Antrag auf Kostenerstattung</h1>
+	</header>
+	<div id="printcontainer_top"><input type="button" value="🖶  Antrag auf Kostenerstattung drucken" id="print_top"></div>
+	<fieldset>
+		<legend>Bitte fülle die allgemeinen Daten für den Kostenerstattungsantrag aus</legend>
+		<fieldset class="iblock"><legend>Dein Projekt</legend>
+		<input required type="input" size="32" id="projekt" name="Projekt" placeholder="Projekt Musterfotografie" />
+		</fieldset>
+		<fieldset class="iblock"><legend>Deine Ansprechperson bei WMDE</legend>
+		<input required type="input" size="32" id="ansprech" name="Ansprechperson" placeholder="Maria Musterfrau" />
+		</fieldset>
+		<hr />
+		<fieldset class="iblock"><legend>Deine Kontaktdaten</legend>
+<!--		<p>Eine Angabe reicht bereits</p>-->
+			<label for="real">Dein Realname</label>
+			<input required type="input" size="32" id="real" name="Realname" placeholder="Corinna Commonsnutzerin" />
+			<label for="email">E-Mail-Adresse</label>
+			<input required type="email" size="32" id="email" name="Emailadresse" placeholder="name@example.org" />
+			<label for="phone">Telefonnummer</label>
+			<input required type="tel" size="32" id="phone" name="Telefonnummer" placeholder="0123-456789" />
+		</fieldset>
+		<fieldset class="iblock"><legend>Bankverbindung</legend>
+			<label for="iban">IBAN</label><input required type="input" size="32" id="iban" name="IBAN" placeholder="DE0123…" />
+			<label for="bic">BIC</label><input required type="input" size="32" id="bic" name="BIC" placeholder="LBMU…" />
+			<label for="bank">Name der Bank</label><input required type="input" size="32" id="bank" name="Bankname" placeholder="Sparkasse Neuland" />
+		</fieldset>
+		<div id="datacontainer"><input type="button" value="💾 Diese Angaben für eine spätere Verwendung auf diesem Rechner sichern (Cookie)" id="save"></div>
+	</fieldset>
+	<h2>Aufstellung</h2>
+	<fieldset id="Aufstellung_alt">
+		<legend class="screen">Bitte trage deine einzelnen Kostenpositionen ein.</legend>
+		<p class="screen">Bitte trage nur eine Ausgabe pro Zeile ein, lege den Originalbeleg dem Antrag bei und versieh den Beleg mit der entsprechenden Zeilennummer (z.B. "Position 1").
+		Bei Reisekostenerstattungen bitte die Reisekostenordnung beachten. Aus der Beschreibung soll zu ersehen sein, ob es sich um Transport, Dienstleistung,
+		Materialien, Verpflegung oder ähnliches handelt.
+		<p class="screen">Bitte rechne Nicht-Euro-Beträge mittels des zum Zeitpunkt gültigen Umrechnungskurses um und vermerke den Originalbetrag unter „Beschreibung“.</p>
+		<table id="Aufstellung">
+			<thead><tr id="aufstellungheader" style="font-size:80%;">
+				<th id="spalte0">Pos.</th>
+				<th id="spalte1">Beschreibung und Anmerkungen</th>
+				<th id="spalte2">Belegdatum</th>
+				<th id="spalte3">Betrag [€]</th>
+				<th id="spalte4">Kostenstelle</th>
+				<th id="spalte5" class="printcell">Genehmigung</th>
+				<th id="spalte6" class="printcell">Anweisung</th>
+				<th id="spalte7" class="printcell">Kontierung</th>
+				<th id="spalte8" class="delete"></th>
+			</tr></thead>
+			<tbody>
+			<tr id="Reihe[0]">
+				<td id="Position[0]" style="text-align: right;">0</td>
+				<td id="Beschreibung[0]"><textarea style="resize:none;" cols="45" rows="1" readonly>Vorschuss</textarea></td>
+				<td id="Belegdatum[0]"><input type="date" style="visibility:hidden;"></td>
+				<td id="Betrag[0]"><input required type="number" step="0.01" value="0.00" min="0.00" max="10000.00" id="vorschuss" name="Vorschuss" style="font-size:120%;" /></td>
+				<td id="Kostenstelle[0]"></td>
+				<td class="printcell" id="Genehmigung[0]"></td>
+				<td class="printcell" id="Anweisung[0]"></td>
+				<td class="printcell" id="Kontierung[0]"></td>
+				<td class="delete" id="delete[0]"></td>
+			</tr>
+			<tr class="screen" id="more"><td colspan="9"><input type="button" id="addbutton" style="width:100%;" value="Ausgabe hinzufügen +" /></td></tr>
+			</tbody>
+			<tfoot>
+			<tr id="Reihe[Summe]">
+				<td colspan="3" style="text-align: right;">Summe Erstattung</td>
+				<td style="text-align: right;"><span class="geld" id="Summe" style="margin-left: 2em; font-weight:bold; color:black; width:8em;"></span></td>
+				<td colspan="5"></td>
+			</tr>
+			</tfoot>
+		</table>
+	</fieldset>
+	<div style="width: 100%; text-align:right; padding-right: 50px; font-weight:bold; font-size:90%;"></div>
+	<div id="printcontainer_bottom"><input type="button" value="🖶  Antrag auf Kostenerstattung drucken" id="print_bottom"></div>
+	<template id="neuerEintrag_alt">
+		<fieldset style="display: none">
+			<legend></legend>
+			<div class="iblock"><label>Beschreibung und Anmerkungen</label><textarea style="resize:both;" cols="45" rows="1" placeholder="Bitte trage hier eine Beschreibung dieser Ausgabe ein."></textarea></div>
+			<div class="iblock"><label>Belegdatum</label><input type="date"></div>
+			<div class="iblock"><label>Betrag [€]</label><input type="number" step="0.01" value="0.00"></div>
+			<div class="printiblock"><label>Kostenstelle</label><span style="width:8em; font-weight: bold;"></span></div>
+			<div class="screen" style="display:inline-block; vertical-align:middle;" id="minus"><button type="button" style="vertical-align:middle;">-</button></div>
+		</fieldset>
+	</template>
+	<template id="neuerEintrag">
+		<tr style="display: none">
+			<td style="text-align: right;"></td>
+			<td><textarea style="resize:both;" cols="45" rows="1" placeholder="Bitte trage hier eine Beschreibung dieser Ausgabe ein."></textarea></td>
+			<td><input type="date"></td>
+			<td><input type="number" min="0.00" max="10000.00" step="0.01" value="0.00"></td>
+			<td><input type="number" min="0" max="99999999" step="1"></td>
+			<td class="printcell"></td>
+			<td class="printcell"></td>
+			<td class="printcell"></td>
+			<td class="delete"><button class="delbutton">-</button></td>
+		</tr>
+	</template>
+	<footer>
+		<a href="mailto:wmde-it@wikimedia.de">Kontakt</a>
+		<p>© 2016 by Wikimedia Deutschland e.V.</p>
+		<address>Wikimedia Deutschland<br>
+Gesellschaft zur Förderung Freien Wissens e.V.<br>
+Postfach 61 03 49<br>
+10925 Berlin<br><br>
+
+http://wikimedia.de<br>
+Tel: 0 30/21 91 58 26-0<br>
+Fax: 0 30/21 91 58 26-9<br>
+E-Mail: info@wikimedia.de<br><br>
+
+IBAN DE05100205000003287300<br>
+BIC BFSWDE33BER<br>
+</address>
+	</footer>
+</body>
+</html>
